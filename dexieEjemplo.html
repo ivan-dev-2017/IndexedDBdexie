@@ -1,0 +1,330 @@
+<!doctype html>
+<html>
+  <head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	
+	<!-- Include Dexie -->
+	<script src="js/dexie.js"></script>
+	<!-- CSS only -->
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+
+	<!-- JS, Popper.js, and jQuery -->
+	<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+	<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
+
+	<script>
+	$( document ).ready(function() {
+		console.log( "ready!" );
+		
+		// Define your database
+		var db = new Dexie("videosDB");
+		db.version(1).stores({video: '++id_video, titulo, año'});		
+		
+		
+		
+		//db.video.each(vid => listarVideos(vid));
+		
+		$( "#btn_listar" ).on( "click", function() {
+			$( "#list_items" ).empty();			
+			db.video.each(vid => listarVideos(vid));
+		});		
+
+		$( "#btn_guardar_nuevo" ).on( "click", function() {
+			let titulo = $("#input_titulo").val();			
+			let anio = $("#input_año").val();
+			db.video.add({titulo: titulo, año: anio});
+			$("#input_titulo").val('');
+			$("#input_año").val('');
+		});	
+
+		function listarVideos(videoActual){
+			console.log(videoActual.id_video, videoActual.titulo, videoActual.año);
+			$( "#list_items" ).append( "<li class='lista'>"+videoActual.titulo+" : "+videoActual.año+"<button id="+videoActual.id_video+" class='botonBorrar'>Borrar</button><button id=E"+videoActual.id_video+" class='botonBorrar'>Editar</button></li>" );
+			$( "#"+videoActual.id_video+"" ).on( "click", seleccionItem);
+			$( "#E"+videoActual.id_video+"" ).on( "click", editarItem);
+		}
+		
+		//$( "#list_items li" ).on( "click", seleccionItem);	
+
+		function seleccionItem(){
+			//console.log(";)",this.id,$(this).attr('id'),$(this).html(),$(this).text());
+			console.log(";)",$(this).attr('id'),$(this).html());				
+			removeRow($(this).attr('id'));
+		}
+		
+		function removeRow (primaryKey) {
+			primaryKey = parseInt(primaryKey);
+			db.video.where('id_video').equals(primaryKey).delete().then(function(deleteCount) {
+				console.log ("Deleted " + deleteCount + " rows");
+			}).catch(function(error) {
+				console.error ("Error: " + error);
+			})
+
+			$( "#list_items" ).empty();
+			db.video.each(vid => listarVideos(vid));
+		};			
+		
+		function editarItem(){
+			//console.log(";)",this.id,$(this).attr('id'),$(this).html(),$(this).text());
+			console.log(";)",$(this).attr('id'),$(this).html());	
+			let idItem = $(this).attr('id').split("E");					
+			editRow(idItem[1]);
+		}	
+
+		function editRow (primaryKey) {
+		
+			let title = $("#input_editar_titulo").val();			
+			let anio = $("#input_editar_año").val();			
+	
+			
+			pk = parseInt(primaryKey);				
+			db.transaction('rw', db.video, function(){
+				db.video.where("id_video").equals(pk).modify({titulo: title, año: anio});
+			}).then(function(){
+				$( "#list_items" ).empty();
+				db.video.each(vid => listarVideos(vid));					
+			}).catch(Dexie.ModifyError, function(e){
+				console.error(e.failures.length + "failed to hire modify");
+				throw e;
+			});
+		};		
+
+		var arrayVideos = [];
+		var numeroVideosEncontrados = 0;
+		
+		$( "#btn_buscar" ).on( "click", function() {
+			
+			$( "#list_items" ).empty();
+			$( "#numero_videos_encontrados" ).empty();
+			numeroVideosEncontrados = 0;
+			
+			let palabraBuscar = $("#input_buscar").val();
+			db.video.each(videito => buscarNombreVideo(videito, palabraBuscar));
+						
+			console.log("FIN",arrayVideos);
+			
+			
+			
+		});	
+
+		function buscarNombreVideo(videoJson, palabra){		
+			let tamPalabra = palabra.length;
+			
+			console.log(palabra," tam",tamPalabra);
+			if(tamPalabra > 0){
+				let nombreVideo = videoJson.titulo;
+				let indicePalabra = nombreVideo.indexOf(palabra);
+				console.log("indice ",indicePalabra," palabra ",palabra," nombreV: ",videoJson," tam ",tamPalabra);
+				if(indicePalabra != -1){
+					arrayVideos.push(videoJson);	
+					$( "#list_items" ).append( "<li class='lista'>"+videoJson.titulo+" : "+videoJson.año+"</li>" );		
+					numeroVideosEncontrados = numeroVideosEncontrados +1;
+					$("#numero_videos_encontrados").text(" "+numeroVideosEncontrados);
+				}			
+			}
+
+			
+		}
+		
+		$( "#btn_exportar" ).on( "click", function() {
+			$( "#contenedor" ).empty();	
+			asyncCall();
+		});					
+		
+		async function asyncCall() {
+			const all = await db.video.toArray();
+			console.log(typeof all,JSON.stringify(all));
+			var data = "text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(all));
+			$('<a href="data:' + data + '" download="IndexedDB.json">Descargar Archivo JSON</a>').appendTo('#contenedor');
+		}		
+		
+		$( "#btn_cifrar" ).on( "click", function() {
+		
+			const enc = new TextEncoder();
+			const dec = new TextDecoder();
+			const keyPair = window.crypto.subtle.generateKey({
+				name: "RSA-OAEP",
+				modulusLength: 4096,
+				publicExponent: new Uint8Array([1, 0, 1]),
+				hash: "SHA-256"
+			  },
+			  true,
+			  ["encrypt", "decrypt"]
+			);
+			const encodedMessage = enc.encode('hello');
+			(async () => {
+			  const {
+				privateKey,
+				publicKey
+			  } = await keyPair;
+			  const encryptedText = await window.crypto.subtle.encrypt({
+				  name: "RSA-OAEP"
+				},
+				publicKey,
+				encodedMessage
+			  )
+			  console.log(encryptedText);
+			  const decryptedText = await window.crypto.subtle.decrypt({
+				  name: "RSA-OAEP"
+				},
+				privateKey,
+				encryptedText
+			  )
+			  console.log(decryptedText);
+			  console.log(dec.decode(decryptedText));
+			})()
+			
+			
+		});			
+
+		
+	});
+				
+				
+	
+		
+	
+	</script>
+	<style>
+		.botonBorrar {
+		  background-color: white;
+		  margin: 2px;
+		  border: 1px solid gray;
+		  font-size: .5rem;
+		  float: right;
+		}	
+		.lista {
+			list-style-type: square;
+		}
+		.lista:hover {
+			border: 1px solid green;
+		}		
+	</style>
+  </head>
+	<body>
+		<div class="container">
+		  <div class="row">
+			<div class="col-md-12">
+				<h4 style="text-align: center;">Dexie IndexedDB</h4>
+			</div>
+
+		  </div>	
+
+		  <div class="row">
+			<div class="col-md-12">
+				<ul class="nav nav-tabs" id="myTab" role="tablist">
+				  <li class="nav-item" role="presentation">
+					<a class="nav-link active" id="home-tab" data-toggle="tab" href="#home" role="tab" aria-controls="home" aria-selected="true">Listar</a>
+				  </li>
+				  <li class="nav-item" role="presentation">
+					<a class="nav-link" id="profile-tab" data-toggle="tab" href="#profile" role="tab" aria-controls="profile" aria-selected="false">Nuevo</a>
+				  </li>
+				  <li class="nav-item" role="presentation">
+					<a class="nav-link" id="contact-tab" data-toggle="tab" href="#contact" role="tab" aria-controls="contact" aria-selected="false">Importar/Exportar</a>
+				  </li>
+				</ul>
+				<div class="tab-content" id="myTabContent">
+				  <div class="tab-pane fade show active" id="home" role="tabpanel" aria-labelledby="home-tab">
+					  <div class="row" style="margin-top:30px;">
+						<div class="col-md-2">
+							<div id="btn_listar" class="btn btn-primary">Listar</div>
+						</div>												
+						
+					  </div>
+					  
+					  <div class="row" style="margin-top:30px;">	
+
+						<div class="col-md-12">
+							<div class="input-group">
+								<input id="input_buscar" type="text" class="form-control" placeholder="Buscar video">
+								<div class="input-group-append">
+									<button class="btn btn-outline-secondary" type="button" id="btn_buscar">
+									Buscar <span style="margin-left:8px;border-color:gray;" id="numero_videos_encontrados" class="badge badge-secondary"></span></button>
+								</div>
+							</div>							
+						</div>							
+						
+					  </div>					  
+					  
+					  <div class="row" style="margin-top:30px;">											
+						<div class="col-md-12">
+							<div class="input-group">
+							  <div class="input-group-prepend">
+								<span class="input-group-text">Editar Video</span>
+							  </div>
+							  <input id="input_editar_titulo" type="text" aria-label="Título: " class="form-control" placeholder="título">
+							  <input id="input_editar_año" type="text" aria-label="Año: " class="form-control" placeholder="año">
+							</div>							
+						</div>													
+					  </div>					  
+					  
+					  
+					  <div class="row" style="margin-top:30px;">
+						<div class="col-md-8">
+							<div class="items">
+							  <ul id="list_items">
+								<!--<li id="100">Item1</li>-->
+							  </ul>
+							</div>						
+						</div>		
+					  </div>					  
+				  </div>
+				  <div class="tab-pane fade" id="profile" role="tabpanel" aria-labelledby="profile-tab">
+					  <div class="row" style="margin-top:30px;">
+						<div class="col-md-10">
+							<div class="input-group">
+							  <div class="input-group-prepend">
+								<span class="input-group-text">Nuevo Video</span>
+							  </div>
+							  <input id="input_titulo" type="text" aria-label="Título: " class="form-control" placeholder="título">
+							  <input id="input_año" type="text" aria-label="Año: " class="form-control" placeholder="año">
+							</div>				
+						</div>			
+						<div class="col-md-2">
+							<div id="btn_guardar_nuevo" class="btn btn-primary">Guardar</div>
+						</div>	
+					  </div>				  
+				  </div>
+				  <div class="tab-pane fade" id="contact" role="tabpanel" aria-labelledby="contact-tab">
+					  <div class="row" style="margin-top:30px;">
+					  
+						<div class="col-md-6">
+							<div id="btn_importar" class="btn btn-primary">ImportarDB</div>
+						</div>		
+						
+						<div class="col-md-6">
+							<div class="row">
+								<div class="col-md-12">
+									<div id="btn_exportar" class="btn btn-primary">ExportarDB</div>								
+								</div>
+							</div>
+							<div class="row">
+								<div class="col-md-12">
+									<div id="contenedor"></div>								
+								</div>
+							</div>							
+							
+						</div>							
+						
+					  </div>	
+					  <div class="row" style="margin-top:30px;">
+					  
+						<div class="col-md-6">
+							<div id="btn_cifrar" class="btn btn-primary">Cifrar</div>
+						</div>									
+						
+					  </div>					  
+				  </div>
+				</div>				
+			</div>		
+		  </div>
+		  
+
+		  
+		  
+		</div>  
+	</body>
+  
+</html>
